@@ -179,7 +179,7 @@ export function loadConfig(): Config {
   }
   const liquidityPoolAddress = (poolOverride as Address) ?? net.liquidityPoolAddress;
 
-  // NB: the SDK's built-in auctionHouseAddress for signet is stale — it points
+  // NB: the SDK's built-in auctionHouseAddress for signet is stale: it points
   // at a dead AuctionHouse that the (correct) vaultManagerAddress does not
   // trust. checkHealth() opens auctions on the house the VaultManager trusts,
   // but getAuction()/listAuctions()/buy() were querying the dead one, so the

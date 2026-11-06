@@ -23,7 +23,7 @@ Surge liquidations are a two-step Dutch auction, not an atomic seize:
   sale is fixed at open time.
 - **Buy:** `buy(nftId, btcAddress)` pays the current USDC price, retires the debt, and records
   your **Bitcoin** address as the collateral recipient. **BTC delivery is off-chain and not
-  atomic** — you pay USDC now and the protocol's signer network broadcasts the BTC to your
+  atomic**: you pay USDC now and the protocol's signer network broadcasts the BTC to your
   address minutes to hours later. That is a trust assumption on the operator; size exposure to it.
 
 So the payout address you provide is a **BTC address**, not an EVM address. Your EVM wallet
@@ -31,7 +31,8 @@ So the payout address you provide is a **BTC address**, not an EVM address. Your
 
 ## Setup
 
-Requires Node 18+.
+Requires Node 22.23.4+ or 24.22.1+, the 20 October 2026 security releases. Node 18 and 20 are
+end-of-life and get no security fixes.
 
 ```bash
 git clone https://github.com/surgecredit/surge-liquidation-engine.git
@@ -103,9 +104,9 @@ Everything lives in `.env` (see `.env.example` for the annotated list). The esse
 Health is shown as how close a position is to liquidation: **100% = at the liquidation
 threshold** (liquidatable boundary), lower is safer. `WATCH_HEALTH_PCT=88` means "flag anything
 that has used up ≥88% of its buffer." The SDK's `isLiquidatable` is the authoritative gate for
-actually opening an auction — the percentage is for monitoring.
+actually opening an auction: the percentage is for monitoring.
 
-### Position discovery — contract-only, no indexer
+### Position discovery: contract-only, no indexer
 
 The SDK has no `listPositions`, but discovery does **not** need an indexer. The engine
 enumerates positions purely from contracts (`src/engine.ts`):
@@ -153,7 +154,7 @@ for each position already in auction (VaultManager.inLiquidation, read during th
 - The optional `BatchBuyer` path is different: it needs a standing unlimited USDC allowance from
   the engine wallet, whatever `UNLIMITED_APPROVAL` says. Only its owner (the deployer) can call
   `run`, and it returns unspent USDC in the same transaction.
-- A wrong-network `RECIPIENT_BTC_ADDRESS` is rejected at startup — seized BTC sent to it would
+- A wrong-network `RECIPIENT_BTC_ADDRESS` is rejected at startup: seized BTC sent to it would
   be unspendable.
 - Buying is a **race**: a clean pre-flight can still lose to a faster bidder (`AUCTION_ALREADY_WON`);
   the engine treats that as a normal skip, never a loss.
@@ -165,9 +166,14 @@ transactions and ignore `DRY_RUN`.
 
 ## Controls
 
-- `q` or `Ctrl-C` — quit.
-- Mouse / arrow keys — scroll the feed.
-- Not a TTY (piped, CI) or `NO_UI=1` — falls back to plain line logging.
+- `q` or `Ctrl-C`: quit.
+- Mouse / arrow keys: scroll the feed.
+- Not a TTY (piped, CI) or `NO_UI=1`: falls back to plain line logging.
+
+## Working on the code
+
+See [AGENTS.md](AGENTS.md) for the layout, the checks to run and the safety rules. AI coding agents
+read it too.
 
 ## Security
 

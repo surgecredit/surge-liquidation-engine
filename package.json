@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": "^22.23.4 || >=24.22.1"
+  },
   "description": "Headless terminal keeper for Surge Credit liquidation auctions, built on @surgecredit/auction-sdk. Watches position health, opens auctions on unhealthy positions, and buys liquidatable BTC collateral with USDC.",
   "repository": {
     "type": "git",

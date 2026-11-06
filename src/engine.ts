@@ -228,7 +228,7 @@ interface BuyDecision {
   reason: string;
 }
 
-// Position debt (incl. interest) in USDC base units — the ~amount of USDC a buy
+// Position debt (incl. interest) in USDC base units: the ~amount of USDC a buy
 // of this position's auction would need. Read on demand for surfaced positions.
 const vaultDebtAbi = [
   {
@@ -250,7 +250,7 @@ const vaultManagerHouseAbi = [
     outputs: [{ type: "address" }],
   },
   // Authoritative, address-independent source of truth for "already in
-  // liquidation" — reads VaultManager's own state directly instead of going
+  // liquidation": reads VaultManager's own state directly instead of going
   // through the (possibly misconfigured) AuctionHouse address.
   {
     type: "function",
@@ -417,12 +417,12 @@ export class Engine {
             this.publicClient.getBalance({ address: lane.account.address }),
           ]);
           if (String(owner).toLowerCase() !== lane.account.address.toLowerCase()) {
-            this.log.error(`${who} does not own its BatchBuyer ${lane.batchBuyer} (owner ${owner}); excluded — run() would revert NotOwner()`);
+            this.log.error(`${who} does not own its BatchBuyer ${lane.batchBuyer} (owner ${owner}); excluded: run() would revert NotOwner()`);
             bad.push(lane.index);
             return;
           }
           if ((allowance as bigint) === 0n) {
-            this.log.error(`${who} has no USDC allowance to ${lane.batchBuyer}; excluded — run() reverts on the budget pull`);
+            this.log.error(`${who} has no USDC allowance to ${lane.batchBuyer}; excluded: run() reverts on the budget pull`);
             bad.push(lane.index);
             return;
           }
@@ -467,7 +467,7 @@ export class Engine {
   // for signet): checkHealth() opens auctions on whatever house the
   // VaultManager itself trusts, not on the SDK's constant. If the two
   // diverge, getAuction()/listAuctions()/buy() silently query a dead
-  // contract — the engine never sees the resulting auction and keeps
+  // contract: the engine never sees the resulting auction and keeps
   // re-calling checkHealth on positions that are already in liquidation.
   // Ask the VaultManager directly and rebuild the client if they disagree.
   // An explicit AUCTION_HOUSE_ADDRESS override skips this (assumed correct).
@@ -520,7 +520,7 @@ export class Engine {
     this.log.info(`Liquidation Engine starting on ${this.cfg.network} (chain ${this.cfg.chainId})`);
     if (this.lanes.length > 1) {
       this.log.info(
-        `MULTI-LANE: ${this.lanes.length} keys — ` +
+        `MULTI-LANE: ${this.lanes.length} keys: ` +
           this.lanes
             .map((l) => `L${l.index} ${l.account.address.slice(0, 10)}…→${(l.batchBuyer ?? "none").slice(0, 10)}…`)
             .join("  "),
@@ -1368,7 +1368,7 @@ export class Engine {
 
     // With a BatchBuyer deployed, every buy in this cycle goes out as one
     // transaction: one nonce, one block. That removes the nonce sequencing
-    // below entirely rather than making it more robust.
+    // below entirely rather than hardening it.
     if (this.cfg.batchBuyerAddress) {
       await this.buyViaBatchBuyer(affordable, this.cfg.batchBuyerAddress);
       return;
