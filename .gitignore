@@ -17,9 +17,5 @@ cache/
 # per-user Claude Code settings
 .claude/settings.local.json
 
-# local run state and scratch notes
-factory-state*.json
-.ladder-*.txt
-
 # per-buy ledger the engine appends at runtime
 liquidation-timings.md
