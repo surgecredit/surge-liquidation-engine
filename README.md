@@ -170,6 +170,24 @@ transactions and ignore `DRY_RUN`.
 - Mouse / arrow keys: scroll the feed.
 - Not a TTY (piped, CI) or `NO_UI=1`: falls back to plain line logging.
 
+## Known limitations
+
+None of these lets the engine spend past its limits; they cost time or gas.
+
+- A BatchBuyer with no USDC allowance on a single-lane setup is kept after the startup check, so its
+  `run` reverts and is retried every 90 s. Run `src/_approve-batchbuyer.ts` (or approve it yourself)
+  before going live.
+- A stale nonce is retried with the same value, which can cost about 22 s per chunk. It is most
+  likely when `POLL_INTERVAL_MS` is below `NONCE_SYNC_MS`.
+- Single buys and opens through the SDK wait for their receipt with viem's default, so one slow
+  transaction can hold the loop for up to 180 s.
+- With several lanes, the BatchBuyer buy path sizes its budget from all lanes' USDC but pulls it from
+  lane 0, so the pull can revert. Fund lane 0 for the buys, or run one lane.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Working on the code
 
 See [AGENTS.md](AGENTS.md) for the layout, the checks to run and the safety rules. AI coding agents
