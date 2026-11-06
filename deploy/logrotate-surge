@@ -1,0 +1,18 @@
+# The unit logs to the journal (capped in bootstrap.sh), so this only matters
+# when LOG_FILE is set in .env.<network>, or when you run deploy/start.sh,
+# which appends to engine-<network>.log in the checkout.
+#
+# copytruncate is mandatory: src/logger.ts opens the log with
+# fs.createWriteStream(..., {flags:"a"}) and holds it for the life of the
+# process -- there is no SIGHUP reopen. A rename-based rotation would leave the
+# engine writing into an unlinked inode and the live log would vanish.
+/var/www/surge-liquidation-engine/engine-*.log /var/log/surge/*.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+    su root root
+}

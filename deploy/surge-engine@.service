@@ -1,0 +1,58 @@
+# Surge liquidation engine, one instance per network.
+#   systemctl enable --now surge-engine@signet
+#   systemctl enable --now surge-engine@mainnet
+#
+# %i is the NETWORK. systemd guarantees one running instance per unit name,
+# which is the point: two engines sharing PRIVATE_KEYS hand out the same
+# nonces and both stall.
+#
+# No EnvironmentFile and no secret store. config.ts already loads
+# .env.testnet / .env.mainnet itself (dotenv, relative to WorkingDirectory),
+# so the env file that is already sitting in the checkout is the config.
+#
+# Set User= to whoever owns the checkout, and make sure the env file is
+# readable by them and nobody else:
+#     sudo chown <user>:<user> .env.testnet && sudo chmod 600 .env.testnet
+
+[Unit]
+Description=Surge liquidation engine (%i)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=surge
+Group=surge
+WorkingDirectory=/var/www/surge-liquidation-engine
+
+# dotenv never overrides a variable already in the environment, so these win
+# over the same keys inside .env.<network> -- no precedence ambiguity.
+Environment=NODE_ENV=production
+Environment=NETWORK=%i
+Environment=NO_UI=1
+Environment=WEB_UI=0
+# Forced empty: a stale pinned list makes the engine blind to every auction
+# outside it, which is what stranded 101 signet auctions at the Dutch floor.
+Environment=POSITION_IDS=
+
+ExecStart=/var/www/surge-liquidation-engine/node_modules/.bin/tsx src/index.ts
+
+# index.ts traps SIGTERM to stop the engine and flush the log stream.
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+Restart=always
+RestartSec=5
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=surge-engine-%i
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+MemoryMax=3G
+
+[Install]
+WantedBy=multi-user.target

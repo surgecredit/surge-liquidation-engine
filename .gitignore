@@ -1,0 +1,25 @@
+node_modules/
+.env
+.env.*
+!.env.example
+!.env.*.example
+.npmrc
+*.log
+logs/
+dist/
+# foundry build output for contracts/BatchBuyer.sol
+out/
+cache/
+
+# engine pid files from deploy/start.sh
+.engine-*.pid
+
+# per-user Claude Code settings
+.claude/settings.local.json
+
+# local run state and scratch notes
+factory-state*.json
+.ladder-*.txt
+
+# per-buy ledger the engine appends at runtime
+liquidation-timings.md

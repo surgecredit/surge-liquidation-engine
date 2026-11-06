@@ -1,0 +1,42 @@
+{
+  "name": "surge-liquidation-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Headless terminal keeper for Surge Credit liquidation auctions, built on @surgecredit/auction-sdk. Watches position health, opens auctions on unhealthy positions, and buys liquidatable BTC collateral with USDC.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/surgecredit/surge-liquidation-engine.git"
+  },
+  "homepage": "https://github.com/surgecredit/surge-liquidation-engine#readme",
+  "bugs": {
+    "url": "https://github.com/surgecredit/surge-liquidation-engine/issues"
+  },
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "testnet": "cp .env.testnet .env && NETWORK=signet tsx src/index.ts",
+    "mainnet": "cp .env.mainnet .env && NETWORK=mainnet tsx src/index.ts",
+    "testnet:web": "cp .env.testnet .env && NETWORK=signet WEB_UI=1 tsx src/index.ts",
+    "mainnet:web": "cp .env.mainnet .env && NETWORK=mainnet WEB_UI=1 tsx src/index.ts",
+    "scan:testnet": "cp .env.testnet .env && NETWORK=signet tsx src/scan.ts",
+    "scan:mainnet": "cp .env.mainnet .env && NETWORK=mainnet tsx src/scan.ts",
+    "dev": "tsx watch src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "contracts:build": "forge build",
+    "deploy:batchbuyer:testnet": "forge build && NETWORK=signet tsx src/deploy-batch-buyer.ts",
+    "deploy:batchbuyer:mainnet": "forge build && NETWORK=mainnet tsx src/deploy-batch-buyer.ts"
+  },
+  "dependencies": {
+    "@surgecredit/auction-sdk": "file:vendor/surgecredit-auction-sdk-0.1.0.tgz",
+    "blessed": "^0.1.81",
+    "dotenv": "^16.4.7",
+    "tsx": "^4.19.2",
+    "viem": "^2.49.4"
+  },
+  "devDependencies": {
+    "@types/blessed": "^0.1.25",
+    "@types/node": "^22.10.2",
+    "typescript": "^5.9.2"
+  },
+  "license": "MIT"
+}
