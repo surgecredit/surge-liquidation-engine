@@ -195,7 +195,8 @@ read it too.
 
 ## Security
 
-Report vulnerabilities privately to developer@surge.build. See [SECURITY.md](SECURITY.md).
+Report vulnerabilities at https://www.surge.credit/security, not in a public issue. See
+[SECURITY.md](SECURITY.md).
 
 ## Licence
 

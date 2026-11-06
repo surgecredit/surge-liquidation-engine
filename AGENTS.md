@@ -73,4 +73,4 @@ Expect `DRY RUN: no transactions will be sent` and `Poll 1: scanned N position(s
 
 ## Security
 
-Report vulnerabilities privately to developer@surge.build (see `SECURITY.md`).
+Report vulnerabilities at https://www.surge.credit/security, never in a public issue (see `SECURITY.md`).
