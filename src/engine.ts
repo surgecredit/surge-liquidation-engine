@@ -21,6 +21,7 @@ import {
   liquidityPoolAbi,
   auctionHouseAbi,
   erc20Abi,
+  positionNftAbi,
   type AuctionNetworkConfig,
   type AuctionSnapshot,
   type BuyQuote,
@@ -81,6 +82,15 @@ const SCAN_CONCURRENCY = Number(process.env.SCAN_CONCURRENCY ?? 10);
 // a restart. Kept well under the auction lifetime so a missed one is picked up
 // long before it expires.
 const RECONCILE_INTERVAL_MS = Number(process.env.RECONCILE_INTERVAL_MS ?? 30_000);
+
+// How often every NFT id is checked with inLiquidation(), whatever its health.
+// This is the only way the engine sees auctions on positions the health scan
+// drops: checkDelinquency (maturity) clears isActive, so listPositions skips the
+// position. Auctions decay over about a day, so 30s is ample.
+const AUCTION_SWEEP_INTERVAL_MS = Number(process.env.AUCTION_SWEEP_INTERVAL_MS ?? 30_000);
+// Calldata bytes per multicall chunk for the sweep (one inLiquidation is ~36),
+// so a few thousand ids go out as a few requests rather than one per KB.
+const AUCTION_SWEEP_BATCH_BYTES = 16_384;
 
 // How often the wallet-state reads (ETH, USDC, allowance) are refreshed. Only
 // the oracle price has to be current every cycle -- it is what moves a position
@@ -284,6 +294,7 @@ export class Engine {
   private readonly log: Logger;
   private readonly dash: Dashboard;
   private readonly publicClient: PublicClient;
+  private positionNft?: Address;
   /**
    * One signing lane: a key, its wallet client, its own BatchBuyer, and its own
    * nonce cursor. Cursors are per-lane because that is the entire point --
@@ -339,6 +350,7 @@ export class Engine {
   // RECONCILE_INTERVAL_MS cadence.
   private readonly openAuctionIds = new Set<string>();
   private lastReconcileTs = 0;
+  private lastSweepTs = 0;
   private lastStatusTs = 0;
   private lastNonceSyncTs = 0;
   private readonly timingLogPath = join(process.cwd(), "liquidation-timings.md");
@@ -573,6 +585,8 @@ export class Engine {
     // against the endpoint that has been rate-limiting us. Set SCAN_AUCTION_LOGS=1
     // to re-enable once the SDK ABI is corrected.
     const inAuctionIds = new Set<string>();
+    // Ids whose inLiquidation was read from chain this cycle by the health scan.
+    const checkedThisCycle = new Set<string>();
     let auctions: AuctionSnapshot[] = [];
     if (process.env.SCAN_AUCTION_LOGS === "1") {
       try {
@@ -642,6 +656,7 @@ export class Engine {
           if (live) this.openAuctionIds.add(nftId);
           else this.openAuctionIds.delete(nftId);
         }
+        for (const id of inAuctionBy.keys()) checkedThisCycle.add(id);
       }
 
       for (const h of relevant) {
@@ -706,6 +721,13 @@ export class Engine {
     } catch (e) {
       this.log.error(`Position discovery failed: ${errMsg(e)}`);
     }
+    // Runs even when the health scan failed, so maturity auctions are not
+    // hidden behind a listPositions error.
+    if (Date.now() - this.lastSweepTs >= AUCTION_SWEEP_INTERVAL_MS) {
+      this.lastSweepTs = Date.now();
+      await withTimeout(this.sweepOpenAuctions(checkedThisCycle, inAuctionIds), this.cfg.scanTimeoutMs, "inLiquidation sweep")
+        .catch((e) => this.log.warn(`inLiquidation sweep failed: ${errMsg(e)}`));
+    }
     this.watched = watched;
 
     const justOpened = await this.openAuctions(toOpen);
@@ -727,9 +749,9 @@ export class Engine {
     // during iteration of a Set is well-defined.)
     for (const id of this.openAuctionIds) if (this.handled.has(id)) this.openAuctionIds.delete(id);
 
-    // openAuctionIds is the discovery source now that the per-cycle
-    // inLiquidation sweep is gone. inAuctionIds still contributes on reconcile
-    // cycles, where it carries fresh on-chain truth.
+    // openAuctionIds is the discovery source between reconciles. On reconcile
+    // cycles inAuctionIds carries fresh on-chain truth, including auctions the
+    // health scan cannot see (sweepOpenAuctions).
     const candidateIds = [...new Set([...auctions.map((a) => a.nftId), ...inAuctionIds, ...this.openAuctionIds, ...justOpened])];
     this.auctionsSeen = candidateIds.length;
 
@@ -828,6 +850,84 @@ export class Engine {
       return { buy: false, reason: `over MAX_SPEND_USDC (${this.cfg.maxSpendUsdc})` };
     }
     return { buy: true, reason: "" };
+  }
+
+  /**
+   * Find open auctions by NFT id, not by health. checkDelinquency (the maturity
+   * path) clears isActive before it opens the auction, so getCollateralRatio
+   * returns 0 and listPositions never returns the position. One multicall of
+   * inLiquidation over every id catches that path and any other. Ids in `skip`
+   * were already read this cycle. A failed read leaves the local record alone.
+   */
+  private async sweepOpenAuctions(skip: Set<string>, inAuctionIds: Set<string>): Promise<void> {
+    let ids: bigint[];
+    if (this.cfg.positionIds.length) {
+      ids = this.cfg.positionIds.map((v) => BigInt(v));
+    } else {
+      this.positionNft ??= (await this.publicClient.readContract({
+        address: this.net.vaultManagerAddress,
+        abi: vaultManagerAbi,
+        functionName: "POSITION_NFT",
+      })) as Address;
+      const nft = this.positionNft;
+      const total = Number(
+        await this.publicClient.readContract({ address: nft, abi: positionNftAbi, functionName: "totalSupply" }),
+      );
+      const floor = Math.max(1, total - this.cfg.maxScanIds + 1);
+      ids = [];
+      for (let i = floor; i <= total; i++) ids.push(BigInt(i));
+    }
+    ids = ids.filter((id) => !skip.has(id.toString()));
+    if (ids.length === 0) return;
+
+    const res = await this.publicClient.multicall({
+      allowFailure: true,
+      batchSize: AUCTION_SWEEP_BATCH_BYTES,
+      contracts: ids.map((id) => ({
+        address: this.net.vaultManagerAddress,
+        abi: vaultManagerHouseAbi,
+        functionName: "inLiquidation" as const,
+        args: [id] as const,
+      })),
+    });
+
+    let hits: bigint[] = [];
+    let failed = 0;
+    res.forEach((r, i) => {
+      const id = ids[i];
+      if (r.status !== "success") {
+        failed += 1;
+        return;
+      }
+      if (r.result) hits.push(id);
+      else this.openAuctionIds.delete(id.toString());
+    });
+    if (failed > 0) this.log.warn(`inLiquidation sweep: ${failed} of ${ids.length} reads failed, kept local record for those.`);
+
+    if (this.cfg.marketId !== undefined && hits.length > 0) {
+      const want = BigInt(this.cfg.marketId);
+      const mkt = await this.publicClient.multicall({
+        allowFailure: true,
+        batchSize: AUCTION_SWEEP_BATCH_BYTES,
+        contracts: hits.map((id) => ({
+          address: this.net.vaultManagerAddress,
+          abi: vaultManagerAbi,
+          functionName: "positionMarket" as const,
+          args: [id] as const,
+        })),
+      });
+      hits = hits.filter((_, i) => mkt[i]?.status === "success" && mkt[i].result === want);
+    }
+
+    for (const id of hits) {
+      const nftId = id.toString();
+      if (this.handled.has(nftId)) continue;
+      if (!this.openAuctionIds.has(nftId)) {
+        this.log.info(`Auction #${nftId} found by id sweep (not in the health scan, e.g. a maturity auction).`);
+      }
+      this.openAuctionIds.add(nftId);
+      inAuctionIds.add(nftId);
+    }
   }
 
   /** Authoritative on-chain check: is this position currently in liquidation/auction? */
